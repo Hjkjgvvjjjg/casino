@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {GoogleGenAI} from '@google/genai';
 import loader from '@monaco-editor/loader';
 import markdownit from 'markdown-it';
 import {sanitizeHtml} from 'safevalues';
@@ -16,7 +17,8 @@ interface MarkdownItInstance {
 // Monaco will be loaded dynamically
 // tslint:disable-next-line:no-any - we need to load the library first.
 // FIX: Renamed 'monaco' variable to 'monacoEditor' to avoid shadowing the global 'monaco' namespace, which caused a circular type reference.
-let monacoEditor: typeof monaco | undefined;
+// FIX: Using 'any' to resolve type incompatibility between the dynamically loaded Monaco editor instance and the global 'monaco' namespace type.
+let monacoEditor: any;
 // tslint:disable-next-line:no-any - we need to load the library first.
 type MonacoEditorInstance = monaco.editor.IStandaloneCodeEditor;
 interface AppMetadata {
@@ -27,6 +29,8 @@ interface AppMetadata {
 const metadataResponse = await fetch('metadata.json');
 const appMetadata: AppMetadata = (await metadataResponse.json()) as AppMetadata;
 
+const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
+
 interface CookbookData {
   notebookCode: string;
 }
@@ -34,6 +38,36 @@ interface CookbookData {
 const cookbookResponse = await fetch('cookbook.json');
 const cookbookMetadata: CookbookData =
   (await cookbookResponse.json()) as CookbookData;
+
+const GEMINI_EXAMPLE_CODE = `/**
+ * The 'ai' object is an instance of the GoogleGenAI client,
+ * pre-configured and available for use in any JS cell.
+ *
+ * It is authenticated via an API key in the environment.
+ */
+const prompt = 'Write a short, thrilling tagline for BDGLORY.CASINO.';
+
+console.log('-- Sending prompt --');
+console.log(prompt)
+console.log('--------------------');
+
+try {
+  // Use the gemini-2.5-flash model for fast, high-quality responses.
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: prompt,
+  });
+
+  // The response object has a 'text' property with the generated text.
+  console.log('--- Response ---');
+  console.log(response.text);
+  console.log('----------------');
+
+} catch(e) {
+  // Handle any errors that might occur during the API call.
+  console.error(e);
+}
+`;
 
 function blobToRaw(blobUrl: string) {
   const pattern =
@@ -660,6 +694,7 @@ async function runCell(cellId: string) {
     'fetch',
     'persistentScope',
     'cellScope',
+    'ai',
     `
     try {
       ${code}
@@ -675,6 +710,7 @@ async function runCell(cellId: string) {
       window.fetch.bind(window),
       persistentScope,
       cellScope,
+      ai,
     );
     markCellAsExecuted(cellId, code);
   } catch (e: unknown) {
@@ -1101,7 +1137,7 @@ limitations under the License.`;
       console.warn(
         'Notebook file is empty or contains no valid cells. Initializing with an empty code cell.',
       );
-      await addCell('', 'js');
+      await addCell(GEMINI_EXAMPLE_CODE, 'js');
     } else {
       for (const cellData of cellsData) {
         await addCell(
@@ -1202,7 +1238,7 @@ limitations under the License.`;
     });
   } catch (error) {
     console.error('Failed to load notebook:', error);
-    await addCell('', 'js');
+    await addCell(GEMINI_EXAMPLE_CODE, 'js');
   }
 })();
 
